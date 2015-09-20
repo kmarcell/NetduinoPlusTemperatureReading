@@ -6,15 +6,21 @@ using System.IO.Ports;
 
 using Microsoft.SPOT;
 using Microsoft.SPOT.Hardware;
+using Microsoft.SPOT.Net.NetworkInformation;
 
 using SecretLabs.NETMF.Hardware;
 using SecretLabs.NETMF.Hardware.NetduinoPlus;
+
+using CloudLib;
+using Logger;
 
 namespace NetduinoPlusTemperatureReading
 {
     public class Program
     {
         static XbeeDevice xbeeCoordinator;
+        static ICloudPlatform upstreamMQTT;
+        static OutputPort onboardLED = new OutputPort(Pins.ONBOARD_LED, false);
 
         public static SerialPort createSerialPortWithName(string name)
         {
@@ -30,46 +36,130 @@ namespace NetduinoPlusTemperatureReading
 
         public static void Main()
         {
+            NDLogger.SetLogLevel(LogLevel.Verbose);
+            NDLogger.Log("Program started!");
+
             xbeeCoordinator = new XbeeDevice(createSerialPortWithName("COM1"));
 
             xbeeCoordinator.BytesReadFromSerial += new BytesReadFromSerialEventHandler(BytesReadFromSerialHandler);
             xbeeCoordinator.FrameDroppedByChecksum += new FrameDroppedByChecksumEventHandler(FrameDroppedByChecksumHandler);
             xbeeCoordinator.ReceivedRemoteFrame += new ReceivedRemoteFrameEventHandler(ReceivedRemoteFrameHandler);
 
-            Debug.Print("Program started!");
+            waitForEthernetSetUp();
+
+            // setup our interrupt port (on-board button)
+            InterruptPort button = new InterruptPort(Pins.ONBOARD_SW1, false, Port.ResistorMode.Disabled, Port.InterruptMode.InterruptEdgeLow);
+
+            // assign our interrupt handler
+            button.OnInterrupt += new NativeEventHandler(button_OnInterrupt);
+
             Thread.Sleep(Timeout.Infinite);
         }
 
-        static Boolean isLogging()
+        static void waitForEthernetSetUp()
         {
-            return false;
+            NetworkInterface NI = NetworkInterface.GetAllNetworkInterfaces()[0];
+
+            if (!NI.IsDhcpEnabled || NI.IPAddress == "0.0.0.0")
+            {
+                NI.EnableDhcp();
+                NI.RenewDhcpLease();
+            }
+
+            int sec = 0;
+            while (NI.IPAddress == "0.0.0.0")
+            {
+                NDLogger.Log("Waiting for DHCP to set up. Elapsed time: " + sec, LogLevel.Verbose);
+                onboardLED.Write(true);
+                Thread.Sleep(5000);
+                sec += 5;
+                NI = NetworkInterface.GetAllNetworkInterfaces()[0];
+            }
+
+            onboardLED.Write(false);
+            NDLogger.Log("Ethernet IP " + NI.IPAddress.ToString(), LogLevel.Verbose);
         }
+
+        // the interrupt handler for the button
+        static void button_OnInterrupt(uint data1, uint data2, DateTime time)
+        {
+            if (upstreamMQTT != null)
+            {
+                upstreamMQTT.UnsubscribeFromEvents();
+                upstreamMQTT.Disconnect();
+                upstreamMQTT = null;
+                NDLogger.Log("MQTT connection canceled", LogLevel.Verbose);
+            }
+            else
+            {
+                startMQTT();
+            }
+        }
+
+        static void startMQTT()
+        {
+            int returnCode = 0;
+                IPHostEntry hostEntry = null;
+
+                try
+                {
+                    hostEntry = Dns.GetHostEntry("192.168.0.14");
+                }
+                catch (SocketException se)
+                {
+                    NDLogger.Log("Socket exception " + se, LogLevel.Error);
+                    return;
+                }
+                catch (ArgumentException ae)
+                {
+                    NDLogger.Log("Argument exception" + ae, LogLevel.Error);
+                    return;
+                }
+
+                upstreamMQTT = new MQTTCloudPlatform();
+                returnCode = upstreamMQTT.Connect(hostEntry, "mkresz", "qwe12ASD", 1883);
+
+                if (returnCode == 0)
+                {
+                    NDLogger.Log("Connected to MQTT", LogLevel.Verbose);
+                }
+                else
+                {
+                    NDLogger.Log("Connection to MQTT failed!", LogLevel.Error);
+                    upstreamMQTT = null;
+                    return;
+                }
+
+                returnCode = upstreamMQTT.SubscribeToEvents(new int[] { 0 }, new String[] { "mkresz/sensors" });
+
+                if (returnCode == 0)
+                {
+                    NDLogger.Log("Subscribed", LogLevel.Verbose);
+                }
+                else
+                {
+                    NDLogger.Log("Subscription failed with errorCode: " + returnCode, LogLevel.Error);
+                }
+            }
 
         static void ReceivedRemoteFrameHandler(object sender, ReceivedRemoteFrameEventArgs e)
         {
             CoreCommunication.DIOADCRx16IndicatorFrame frame = (CoreCommunication.DIOADCRx16IndicatorFrame)e.Frame;
             double analogSample = frame.AnalogSampleData[0];
             double temperatureCelsius = ((analogSample / 1023.0 * 3.3) - 0.5) * 100.0;
-            Debug.Print("Temperature " + temperatureCelsius + " Celsius" + " sample " + analogSample);
+            NDLogger.Log("Temperature " + temperatureCelsius + " Celsius" + " sample " + analogSample, LogLevel.Info);
         }
 
         static void FrameDroppedByChecksumHandler(object sender, FrameDroppedByChecksumEventArgs e)
         {
-            if (isLogging())
-            {
-                Debug.Print("Frame dropped because of checksum:");
-                logBytesRead(e.RawBytes);
-                    
-            }
+            NDLogger.Log("Frame dropped because of checksum:", LogLevel.Error);
+            logBytesRead(e.RawBytes);
         }
 
         static void BytesReadFromSerialHandler(object sender, BytesReadFromSerialEventArgs e)
         {
-            if (isLogging())
-            {
-                Debug.Print("Bytes read from serial:");
-                logBytesRead(e.RawBytes);
-            }
+            NDLogger.Log("Bytes read from serial:", LogLevel.Verbose);
+            logBytesRead(e.RawBytes);
         }
 
         
@@ -80,7 +170,7 @@ namespace NetduinoPlusTemperatureReading
             {
                 log += ByteToHex(bytes[i]) + " ";
             }
-            Debug.Print(log);
+            NDLogger.Log(log, LogLevel.Verbose);
         }
 
         static string ByteToHex(byte b)

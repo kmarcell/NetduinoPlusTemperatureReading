@@ -32,13 +32,14 @@
   </PropertyGroup>
   <Import Project="$(NetMfTargetsBaseDir)$(TargetFrameworkVersion)\CSharp.Targets" />
   <ItemGroup>
-    <Compile Include="CloudKit\CloudPlatform.cs" />
+    <Compile Include="CloudLib\CloudPlatform.cs" />
+    <Compile Include="CloudLib\MQTTCloudPlatform.cs" />
     <Compile Include="CoreCommunication\ByteOperations.cs" />
     <Compile Include="CoreCommunication\DiscoveryService.cs" />
     <Compile Include="CoreCommunication\FrameParser.cs" />
     <Compile Include="CoreCommunication\FrameType.cs" />
-    <Compile Include="CloudKit\MQTT\NetduinoMQTT.cs" />
-    <Compile Include="CloudKit\MQTT\Example.cs" />
+    <Compile Include="CloudLib\MQTT\NetduinoMQTT.cs" />
+    <Compile Include="CloudLib\MQTT\Example.cs" />
     <Compile Include="NDLogger.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Program.cs" />

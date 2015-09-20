@@ -2,7 +2,9 @@ using System;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
+
 using Microsoft.SPOT;
+using Microsoft.SPOT.Net.NetworkInformation;
 
 using Logger;
 using Netduino_MQTT_Client_Library;
@@ -32,20 +34,20 @@ namespace CloudLib
         public int Connect(IPHostEntry host, string username, string password, int port = 1883)
         {
             socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            try
+            bool success = TryConnect(socket, new IPEndPoint(host.AddressList[0], port));
+
+            if (!success)
             {
-                socket.Connect(new IPEndPoint(host.AddressList[0], port));
-            }
-            catch (SocketException SE)
-            {
-                NDLogger.Log("Socket Error: " + SE.ErrorCode, LogLevel.Error);
-                return SE.ErrorCode;
+                socket.Close();
+                socket = null;
+                NDLogger.Log("Unknown socket error!", LogLevel.Error);
+                return Constants.CONNECTION_ERROR;
             }
 
             int returnCode = NetduinoMQTT.ConnectMQTT(socket, this.ClientID, 20, true, username, password);
-            if (returnCode != 0)
+            if (returnCode != Constants.SUCCESS)
             {
-                Debug.Print("MQTT connection Error: " + returnCode.ToString());
+                NDLogger.Log("MQTT connection Error: " + returnCode, LogLevel.Error);
                 return returnCode;
             }
 
@@ -56,6 +58,26 @@ namespace CloudLib
             listenerThread.Start();
 
             return 0;
+        }
+
+        bool TryConnect(Socket s, EndPoint ep)
+        {
+            bool connected = false;
+            new Thread(delegate
+            {
+                try
+                {
+                    s.Connect(ep);
+                    connected = true;
+                }
+                catch { }
+
+            }).Start();
+
+            int checks = 10;
+            while (checks-- > 0 && connected == false) Thread.Sleep(100);
+            
+            return connected;
         }
 
         public int Disconnect()
@@ -94,10 +116,27 @@ namespace CloudLib
         {
             get
             {
-                byte[] PhysicalAddress = Microsoft.SPOT.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()[0].PhysicalAddress;
-                string MACaddress = new string(System.Text.Encoding.UTF8.GetChars(PhysicalAddress));
+                NetworkInterface[] netIF = NetworkInterface.GetAllNetworkInterfaces();
 
-                return MACaddress;
+                string macAddress = "";
+
+                // Create a character array for hexidecimal conversion.
+                const string hexChars = "0123456789ABCDEF";
+
+                // Loop through the bytes.
+                for (int b = 0; b < 6; b++)
+                {
+                    // Grab the top 4 bits and append the hex equivalent to the return string.
+                    macAddress += hexChars[netIF[0].PhysicalAddress[b] >> 4];
+
+                    // Mask off the upper 4 bits to get the rest of it.
+                    macAddress += hexChars[netIF[0].PhysicalAddress[b] & 0x0F];
+
+                    // Add the dash only if the MAC address is not finished.
+                    if (b < 5) macAddress += "-";
+                }
+
+                return macAddress;
             }
         }
 

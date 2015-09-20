@@ -19,7 +19,7 @@ namespace CloudLib
         int Connect(IPHostEntry host, String username, String password, int port);
         int Disconnect();
 
-        int SubscribeToEvents();
+        int SubscribeToEvents(int[] topicQoS, String[] subTopics);
         int UnsubscribeFromEvents();
 
         int PostEvent(CLEvent e);
