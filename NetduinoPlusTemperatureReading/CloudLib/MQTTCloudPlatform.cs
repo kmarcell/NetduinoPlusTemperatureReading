@@ -18,6 +18,8 @@ namespace CloudLib
         protected int[] topicQoS;
         protected String[] subTopics;
 
+        protected String userName;
+
         ~MQTTCloudPlatform()
         {
             if (listenerThread != null)
@@ -31,10 +33,11 @@ namespace CloudLib
             }
         }
 
-        public int Connect(IPHostEntry host, string username, string password, int port = 1883)
+        public int Connect(IPHostEntry host, String userName, string password, int port = 1883)
         {
             socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             bool success = TryConnect(socket, new IPEndPoint(host.AddressList[0], port));
+            this.userName = userName;
 
             if (!success)
             {
@@ -44,7 +47,7 @@ namespace CloudLib
                 return Constants.CONNECTION_ERROR;
             }
 
-            int returnCode = NetduinoMQTT.ConnectMQTT(socket, this.ClientID, 20, true, username, password);
+            int returnCode = NetduinoMQTT.ConnectMQTT(socket, this.ClientID, 20, true, userName, password);
             if (returnCode != Constants.SUCCESS)
             {
                 NDLogger.Log("MQTT connection Error: " + returnCode, LogLevel.Error);
@@ -106,7 +109,9 @@ namespace CloudLib
 
         public int PostEvent(CLEvent e)
         {
-            NetduinoMQTT.PublishMQTT(socket, TopicFromEventType(e.EventType), "{ value : " + e.EventValue + " }");
+            if (listenerThread == null) { return 1; }
+
+            NetduinoMQTT.PublishMQTT(socket, TopicFromEventType(e.EventType), "" + e.EventValue);
             return 0;
         }
 
@@ -161,7 +166,7 @@ namespace CloudLib
             switch (type)
             {
                 case (int)CLEventType.CLTemperatureReadingEventType:
-                    topic = "TemperatureReading";
+                    topic = "users/" + this.userName + "/sensors";
                     break;
 
                 default:

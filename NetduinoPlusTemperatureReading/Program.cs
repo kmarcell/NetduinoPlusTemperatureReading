@@ -60,9 +60,13 @@ namespace NetduinoPlusTemperatureReading
         {
             NetworkInterface NI = NetworkInterface.GetAllNetworkInterfaces()[0];
 
-            if (!NI.IsDhcpEnabled || NI.IPAddress == "0.0.0.0")
+            if (!NI.IsDhcpEnabled)
             {
                 NI.EnableDhcp();
+                
+            }
+
+            if (NI.IPAddress == "0.0.0.0") {
                 NI.RenewDhcpLease();
             }
 
@@ -103,7 +107,7 @@ namespace NetduinoPlusTemperatureReading
 
                 try
                 {
-                    hostEntry = Dns.GetHostEntry("192.168.0.14");
+                    hostEntry = Dns.GetHostEntry("ec2-52-29-5-113.eu-central-1.compute.amazonaws.com");
                 }
                 catch (SocketException se)
                 {
@@ -148,6 +152,11 @@ namespace NetduinoPlusTemperatureReading
             double analogSample = frame.AnalogSampleData[0];
             double temperatureCelsius = ((analogSample / 1023.0 * 3.3) - 0.5) * 100.0;
             NDLogger.Log("Temperature " + temperatureCelsius + " Celsius" + " sample " + analogSample, LogLevel.Info);
+
+            if (upstreamMQTT != null)
+            {
+                upstreamMQTT.PostEvent(new CLEvent((int)CLEventType.CLTemperatureReadingEventType, temperatureCelsius));
+            }
         }
 
         static void FrameDroppedByChecksumHandler(object sender, FrameDroppedByChecksumEventArgs e)

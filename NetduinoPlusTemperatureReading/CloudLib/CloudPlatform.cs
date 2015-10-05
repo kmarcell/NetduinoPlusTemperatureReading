@@ -12,6 +12,12 @@ namespace CloudLib
     {
         public int EventType;
         public double EventValue;
+
+        public CLEvent(int eventType, double eventValue)
+        {
+            this.EventType = eventType;
+            this.EventValue = eventValue;
+        }
     }
 
     public interface ICloudPlatform
