@@ -32,6 +32,8 @@
   </PropertyGroup>
   <Import Project="$(NetMfTargetsBaseDir)$(TargetFrameworkVersion)\CSharp.Targets" />
   <ItemGroup>
+    <Compile Include="Application.cs" />
+    <Compile Include="IApplication.cs" />
     <Compile Include="CloudLib\CloudPlatform.cs" />
     <Compile Include="CloudLib\MQTTCloudPlatform.cs" />
     <Compile Include="CoreCommunication\ByteOperations.cs" />
@@ -40,7 +42,9 @@
     <Compile Include="CoreCommunication\FrameType.cs" />
     <Compile Include="CloudLib\MQTT\NetduinoMQTT.cs" />
     <Compile Include="CloudLib\MQTT\Example.cs" />
+    <Compile Include="NDBroadcastAddress.cs" />
     <Compile Include="NDLogger.cs" />
+    <Compile Include="NDSockets.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Xbee\XbeeDevice.cs" />
