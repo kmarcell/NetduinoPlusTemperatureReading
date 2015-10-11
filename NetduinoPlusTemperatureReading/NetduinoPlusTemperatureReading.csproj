@@ -43,6 +43,7 @@
     <Compile Include="CoreCommunication\FrameType.cs" />
     <Compile Include="CloudLib\MQTT\NetduinoMQTT.cs" />
     <Compile Include="NDBroadcastAddress.cs" />
+    <Compile Include="NDConfiguration.cs" />
     <Compile Include="NDLogger.cs" />
     <Compile Include="NDMQTT.cs" />
     <Compile Include="NDSockets.cs" />

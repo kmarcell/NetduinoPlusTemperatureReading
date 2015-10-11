@@ -69,7 +69,7 @@ namespace NetduinoPlusTemperatureReading
         {
             if (!NDBroadcastAddress.sharedInstance.isBroadcasting)
             {
-                NDBroadcastAddress.sharedInstance.startBroadcast("192.168.0.255");
+                NDBroadcastAddress.sharedInstance.startBroadcast(NDConfiguration.DefaultConfiguration.BroadcastAddress);
             }  
         }
     }

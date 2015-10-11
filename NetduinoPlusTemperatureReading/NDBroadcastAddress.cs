@@ -67,7 +67,7 @@ namespace NetduinoPlusTemperatureReading
         public void broadcast()
         {
 
-            byte[] myNbName = EncodeNetbiosName("NETDUINO");
+            byte[] myNbName = EncodeNetbiosName(NDConfiguration.DefaultConfiguration.NetbiosName);
             NetworkInterface[] networkInterfaces = NetworkInterface.GetAllNetworkInterfaces();
 
             using (Socket serverSocket = new Socket(AddressFamily.InterNetwork,
@@ -89,7 +89,7 @@ namespace NetduinoPlusTemperatureReading
                         {
                             byte[] nbName = new byte[32];
                             Array.Copy(inBuffer, 13, nbName, 0, 32);
-                            Debug.Print("NETBIOS NAME QUERY: " + DecodeNetbiosName(nbName));
+                            NDLogger.Log("NETBIOS NAME QUERY: " + DecodeNetbiosName(nbName), LogLevel.Verbose);
                             if (BytesEqual(inBuffer, 13, myNbName, 0, 32))
                             {
                                 byte[] outBuffer = new byte[62];

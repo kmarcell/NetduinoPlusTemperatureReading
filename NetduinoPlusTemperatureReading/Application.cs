@@ -104,7 +104,7 @@ namespace NetduinoPlusTemperatureReading
             IPHostEntry hostEntry = null;
             try
             {
-                hostEntry = Dns.GetHostEntry("ec2-52-29-5-113.eu-central-1.compute.amazonaws.com");
+                hostEntry = Dns.GetHostEntry(Configuration.MQTT.HostName);
             }
             catch (SocketException se)
             {
@@ -114,7 +114,7 @@ namespace NetduinoPlusTemperatureReading
 
             upstreamMQTT = new NDMQTT();
 
-            int returnCode = upstreamMQTT.Connect(hostEntry, "mkresz", "qwe12ASD", 1883);
+            int returnCode = upstreamMQTT.Connect(hostEntry, Configuration.MQTT.UserName, Configuration.MQTT.Password, Configuration.MQTT.HostPort);
 
             if (returnCode == 0)
             {
@@ -126,7 +126,12 @@ namespace NetduinoPlusTemperatureReading
                 return;
             }
 
-            upstreamMQTT.SubscribeToEvents(new int[] { 0 }, new String[] { "users/mkresz/sensors" });
+            upstreamMQTT.SubscribeToEvents(new int[] { 0 }, new String[] { Configuration.MQTT.SensorDataTopic });
+        }
+
+        public NDConfiguration Configuration
+        {
+            get { return NDConfiguration.DefaultConfiguration; }
         }
 
         void ReceivedRemoteFrameHandler(object sender, ReceivedRemoteFrameEventArgs e)

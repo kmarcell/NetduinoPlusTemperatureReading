@@ -8,7 +8,6 @@ namespace NetduinoPlusTemperatureReading
 {
     class NDMQTT : MQTTCloudPlatform
     {
-
         public NDMQTT()
         {
             this.TopicFromEventType = topicFromEventType;
@@ -21,11 +20,11 @@ namespace NetduinoPlusTemperatureReading
             switch (type)
             {
                 case (int)CLEventType.CLTemperatureReadingEventType:
-                    topic = "users/" + this.userName + "/sensors";
+                    topic = NDConfiguration.DefaultConfiguration.MQTT.SensorDataTopic;
                     break;
 
                 case (int)CLEventType.CLLogMessageEventType:
-                    topic = "users/" + this.userName + "/log";
+                    topic = NDConfiguration.DefaultConfiguration.MQTT.LogTopic;
                     break;
 
                 default:
