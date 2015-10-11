@@ -133,7 +133,7 @@ namespace NetduinoPlusTemperatureReading
         {
             CoreCommunication.DIOADCRx16IndicatorFrame frame = (CoreCommunication.DIOADCRx16IndicatorFrame)e.Frame;
             double analogSample = frame.AnalogSampleData[0];
-            double temperatureCelsius = ((analogSample / 1023.0 * 3.16) - 0.5) * 100.0;
+            double temperatureCelsius = ((analogSample / 1023.0 * 3.3) - 0.5) * 100.0;
             NDLogger.Log("Temperature " + temperatureCelsius + " Celsius" + " sample " + analogSample, LogLevel.Info);
 
             if (upstreamMQTT != null)
