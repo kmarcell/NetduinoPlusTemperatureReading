@@ -18,16 +18,23 @@ namespace NetduinoPlusTemperatureReading
     class Application : IApplication
     {
         private XbeeDevice xbeeCoordinator;
-        private ICloudPlatform upstreamMQTT;
-        private OutputPort onboardLED = new OutputPort(Pins.ONBOARD_LED, false);
+        private MQTTCloudPlatform upstreamMQTT;
+        private OutputPort onboardLED;
 
         public void applicationWillStart()
         {
             // Logging
+            NDLogger.RemoveLoggers();
+            NDLogger.AddLogger(new NDTTYLogger());
             NDLogger.SetLogLevel(LogLevel.Verbose);
-            NDLogger.Log("Program started!");
 
+            NDLogger.Log("Program started!");
             NDLogger.Log("Waiting for DHCP to set up.", LogLevel.Verbose);
+
+            if (onboardLED == null)
+            {
+                onboardLED = new OutputPort(Pins.ONBOARD_LED, false);
+            }
             onboardLED.Write(true);
         }
 
@@ -68,68 +75,65 @@ namespace NetduinoPlusTemperatureReading
         {
             if (upstreamMQTT != null)
             {
-                upstreamMQTT.UnsubscribeFromEvents();
+                try
+                {
+                    upstreamMQTT.UnsubscribeFromEvents();
+                }
+                catch
+                {
+                }
+
                 upstreamMQTT.Disconnect();
                 upstreamMQTT = null;
-                NDLogger.Log("MQTT connection canceled", LogLevel.Verbose);
+                NDLogger.Log("MQTT connection cancelled", LogLevel.Verbose);
             }
             else
             {
-                startMQTT();
+                try
+                {
+                    startMQTT();
+                }
+                catch
+                {
+                }
             }
         }
 
         void startMQTT()
         {
-            int returnCode = 0;
             IPHostEntry hostEntry = null;
-
             try
             {
                 hostEntry = Dns.GetHostEntry("ec2-52-29-5-113.eu-central-1.compute.amazonaws.com");
             }
             catch (SocketException se)
             {
-                NDLogger.Log("Socket exception " + se, LogLevel.Error);
-                return;
-            }
-            catch (ArgumentException ae)
-            {
-                NDLogger.Log("Argument exception" + ae, LogLevel.Error);
+                NDLogger.Log("Unable to get host entry by DNS error: " + se, LogLevel.Error);
                 return;
             }
 
-            upstreamMQTT = new MQTTCloudPlatform();
-            returnCode = upstreamMQTT.Connect(hostEntry, "mkresz", "qwe12ASD", 1883);
+            upstreamMQTT = new NDMQTT();
+
+            int returnCode = upstreamMQTT.Connect(hostEntry, "mkresz", "qwe12ASD", 1883);
 
             if (returnCode == 0)
             {
-                NDLogger.Log("Connected to MQTT", LogLevel.Verbose);
+                NDLogger.AddLogger(new MQTTLogger(upstreamMQTT));
             }
             else
             {
-                NDLogger.Log("Connection to MQTT failed!", LogLevel.Error);
                 upstreamMQTT = null;
                 return;
             }
 
-            returnCode = upstreamMQTT.SubscribeToEvents(new int[] { 0 }, new String[] { "mkresz/sensors" });
-
-            if (returnCode == 0)
-            {
-                NDLogger.Log("Subscribed", LogLevel.Verbose);
-            }
-            else
-            {
-                NDLogger.Log("Subscription failed with errorCode: " + returnCode, LogLevel.Error);
-            }
+            upstreamMQTT.SubscribeToEvents(new int[] { 0 }, new String[] { "users/mkresz/sensors" });
         }
 
         void ReceivedRemoteFrameHandler(object sender, ReceivedRemoteFrameEventArgs e)
         {
             CoreCommunication.DIOADCRx16IndicatorFrame frame = (CoreCommunication.DIOADCRx16IndicatorFrame)e.Frame;
             double analogSample = frame.AnalogSampleData[0];
-            double temperatureCelsius = ((analogSample / 1023.0 * 3.3) - 0.5) * 100.0;
+            double temperatureCelsius = ((analogSample / 1023.0 * 3.16) - 0.5) * 100.0;
             NDLogger.Log("Temperature " + temperatureCelsius + " Celsius" + " sample " + analogSample, LogLevel.Info);
 
             if (upstreamMQTT != null)

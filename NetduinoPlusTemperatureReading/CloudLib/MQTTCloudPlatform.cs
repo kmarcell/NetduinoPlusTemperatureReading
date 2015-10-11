@@ -4,7 +4,6 @@ using System.Net.Sockets;
 using System.Threading;
 
 using Microsoft.SPOT;
-using Microsoft.SPOT.Net.NetworkInformation;
 
 using Logger;
 using Netduino_MQTT_Client_Library;
@@ -13,12 +12,21 @@ namespace CloudLib
 {
     class MQTTCloudPlatform : ICloudPlatform
     {
-        protected Socket socket;
-        protected Thread listenerThread;
-        protected int[] topicQoS;
-        protected String[] subTopics;
+        private Socket socket;
+        private Thread listenerThread;
 
-        protected String userName;
+        private int[] topicQoS;
+        protected string[] subTopics;
+
+        protected IPHostEntry host;
+        protected string userName;
+        protected string password;
+        protected int port;
+
+        protected string clientID;
+
+        public delegate string TopicFromEventTypeHandler(int eventType);
+        public TopicFromEventTypeHandler TopicFromEventType;
 
         ~MQTTCloudPlatform()
         {
@@ -33,11 +41,29 @@ namespace CloudLib
             }
         }
 
-        public int Connect(IPHostEntry host, String userName, string password, int port = 1883)
+        public MQTTCloudPlatform()
         {
+        }
+
+        public MQTTCloudPlatform(string clientID)
+        {
+            this.clientID = clientID;
+        }
+
+        public int Connect(IPHostEntry host, string userName, string password, int port = 1883)
+        {
+
+            if (host == null || userName == null || password == null)
+            {
+                return Constants.CONNECTION_ERROR;
+            }
+
             socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             bool success = TryConnect(socket, new IPEndPoint(host.AddressList[0], port));
             this.userName = userName;
+            this.password = password;
+            this.host = host;
+            this.port = port;
 
             if (!success)
             {
@@ -47,13 +73,14 @@ namespace CloudLib
                 return Constants.CONNECTION_ERROR;
             }
 
-            int returnCode = NetduinoMQTT.ConnectMQTT(socket, this.ClientID, 20, true, userName, password);
+            int returnCode = NetduinoMQTT.ConnectMQTT(socket, clientID, 20, true, userName, password);
             if (returnCode != Constants.SUCCESS)
             {
-                NDLogger.Log("MQTT connection Error: " + returnCode, LogLevel.Error);
+                NDLogger.Log("MQTT connection error: " + returnCode, LogLevel.Error);
                 return returnCode;
             }
 
+            NDLogger.Log("Connected to MQTT", LogLevel.Verbose);
             Timer pingTimer = new Timer(new TimerCallback(PingServer), null, 1000, 10000);
 
             // Setup and start a new thread for the listener
@@ -78,14 +105,22 @@ namespace CloudLib
             }).Start();
 
             int checks = 10;
-            while (checks-- > 0 && connected == false) Thread.Sleep(100);
+            while (checks-- > 0 && connected == false)
+            {
+                Thread.Sleep(100);
+            }
             
             return connected;
         }
 
         public int Disconnect()
         {
-            int returnCode = NetduinoMQTT.DisconnectMQTT(socket);
+            int returnCode = 0;
+            try
+            {
+                returnCode = NetduinoMQTT.DisconnectMQTT(socket);
+            }
+            catch { }
 
             socket.Close();
             socket = null;
@@ -93,11 +128,21 @@ namespace CloudLib
             return returnCode;
         }
 
-        public int SubscribeToEvents(int[] topicQoS, String[] subTopics)
+        public int SubscribeToEvents(int[] topicQoS, string[] subTopics)
         {
             this.topicQoS = topicQoS;
             this.subTopics = subTopics;
             int returnCode = NetduinoMQTT.SubscribeMQTT(socket, subTopics, topicQoS, 1);
+
+            if (returnCode == 0)
+            {
+                NDLogger.Log("Subscribed to " + subTopics, LogLevel.Verbose);
+            }
+            else
+            {
+                NDLogger.Log("Subscription failed with errorCode: " + returnCode, LogLevel.Error);
+            }
+
             return returnCode;
         }
 
@@ -111,70 +156,49 @@ namespace CloudLib
         {
             if (listenerThread == null) { return 1; }
 
-            NetduinoMQTT.PublishMQTT(socket, TopicFromEventType(e.EventType), "" + e.EventValue);
+            string topic = TopicFromEventType(e.EventType);
+            string message = e.serialize();
+            try
+            {
+                NetduinoMQTT.PublishMQTT(socket, topic, message);
+            }
+            catch
+            {
+                Disconnect();
+                Connect(host, userName, password, port);
+            }
+
+            // do not log publish here with mqtt logger, it causes a call cycle
+
             return 0;
         }
 
         /** Private **/
-
-        protected string ClientID
-        {
-            get
-            {
-                NetworkInterface[] netIF = NetworkInterface.GetAllNetworkInterfaces();
-
-                string macAddress = "";
-
-                // Create a character array for hexidecimal conversion.
-                const string hexChars = "0123456789ABCDEF";
-
-                // Loop through the bytes.
-                for (int b = 0; b < 6; b++)
-                {
-                    // Grab the top 4 bits and append the hex equivalent to the return string.
-                    macAddress += hexChars[netIF[0].PhysicalAddress[b] >> 4];
-
-                    // Mask off the upper 4 bits to get the rest of it.
-                    macAddress += hexChars[netIF[0].PhysicalAddress[b] & 0x0F];
-
-                    // Add the dash only if the MAC address is not finished.
-                    if (b < 5) macAddress += "-";
-                }
-
-                return macAddress;
-            }
-        }
 
         // The function that the timer calls to ping the server
         // Our keep alive is 15 seconds - we ping again every 10. 
         // So we should live forever.
         private void PingServer(object o)
         {
-            Debug.Print("pingIT");
             NetduinoMQTT.PingMQTT(socket);
         }
 
         // The thread that listens for inbound messages
         private void mylistenerThread()
         {
-            NetduinoMQTT.listen(socket);
-        }
-
-        private String TopicFromEventType(int type)
-        {
-            String topic = "";
-            switch (type)
+            try
             {
-                case (int)CLEventType.CLTemperatureReadingEventType:
-                    topic = "users/" + this.userName + "/sensors";
-                    break;
-
-                default:
-                    break;
+                NetduinoMQTT.listen(socket);
             }
-
-            return topic;
+            catch (Exception e)
+            {
+                NDLogger.Log("MQTT cloud platform listener error: " + e.Message, LogLevel.Error);
+                NDLogger.Log(e.StackTrace, LogLevel.Verbose);
+                NDLogger.Log("MQTT cloud platform restarting", LogLevel.Verbose);
+                Disconnect();
+                Connect(host, userName, password, port);
+                NDLogger.Log("MQTT cloud platform restarted", LogLevel.Verbose);
+            }
         }
-
     }
 }

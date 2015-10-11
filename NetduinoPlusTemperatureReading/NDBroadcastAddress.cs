@@ -7,12 +7,15 @@ using System.Threading;
 using Microsoft.SPOT;
 using Microsoft.SPOT.Net.NetworkInformation;
 
+using Logger;
+
 namespace NetduinoPlusTemperatureReading
 {
     class NDBroadcastAddress
     {
         private static NDBroadcastAddress instance;
         private const int UDP_PORT_NETBIOS_NS = 137;
+        private Thread broadcastThread = null;
 
         private NDBroadcastAddress()
         {
@@ -30,17 +33,35 @@ namespace NetduinoPlusTemperatureReading
             }
         }
 
-        public void startBroadcast(String broadcastAddress, int interval = 5000)
+        public Boolean isBroadcasting
         {
-            new Thread(delegate
+            get
+            {
+                return broadcastThread != null;
+            }
+        }
+
+        public void startBroadcast(String broadcastAddress)
+        {
+            broadcastThread = new Thread(delegate
             {
                 try
                 {
                     broadcast();
                 }
-                catch { }
+                catch (Exception e)
+                {
+                    NDLogger.Log("Broadcast exception " + e.Message, LogLevel.Error);
+                    startBroadcast(broadcastAddress);
+                }
+            });
 
-            }).Start();
+            broadcastThread.Start();
+        }
+
+        public void stopBroadcast()
+        {
+            broadcastThread.Abort();
         }
 
         public void broadcast()

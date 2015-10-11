@@ -11,18 +11,35 @@ namespace NetduinoPlusTemperatureReading
     public class Program
     {
         static IApplication application;
+        static bool shouldRestart;
 
         public static void Main()
         {
-            application = new Application();
-            application.applicationWillStart();
-
-            waitForEthernetSetUp();
-            setupBroadcast();
-
-            application.didFinishLaunching();
+            shouldRestart = true;
+            while (shouldRestart)
+            {
+                shouldRestart = false;
+                try
+                {
+                    runApplication();
+                }
+                catch (Exception e)
+                {
+                    Debug.Print("Unhandled exception happened, program restarted. Reason: " + e.Message);
+                    shouldRestart = true;
+                }
+            }
 
             Thread.Sleep(Timeout.Infinite);
+        }
+
+        public static void runApplication()
+        {
+            application = new Application();
+            application.applicationWillStart();
+            waitForEthernetSetUp();
+            setupBroadcast();
+            application.didFinishLaunching();
         }
 
         static void waitForEthernetSetUp()
@@ -50,7 +67,10 @@ namespace NetduinoPlusTemperatureReading
 
         static void setupBroadcast()
         {
-            NDBroadcastAddress.sharedInstance.startBroadcast("192.168.0.255");
+            if (!NDBroadcastAddress.sharedInstance.isBroadcasting)
+            {
+                NDBroadcastAddress.sharedInstance.startBroadcast("192.168.0.255");
+            }  
         }
     }
 }
